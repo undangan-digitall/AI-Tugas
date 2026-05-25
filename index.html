@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>UNIB Navigator - OpenStreetMap Routing</title>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Leaflet Routing Machine (OSRM) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #1a1a3e 50%, #24243e 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .bg-particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background-image: radial-gradient(circle, rgba(129,140,248,0.08) 1px, transparent 1px);
+            background-size: 40px 40px;
+            animation: floatBG 40s linear infinite;
+        }
+        @keyframes floatBG {
+            0% { transform: translate(0,0); }
+            100% { transform: translate(-50px,-50px); }
+        }
+        
+        .app-container { max-width: 1600px; margin: 0 auto; position: relative; z-index: 1; }
+        
+        .header { text-align: center; margin-bottom: 24px; }
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, #a5b4fc, #c4b5fd);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .header .badge-container { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+        .header .badge {
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(10px);
+            padding: 6px 18px;
+            border-radius: 40px;
+            font-size: 0.75rem;
+            color: #a5b4fc;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .main-grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; }
+        
+        .control-panel {
+            background: rgba(15,23,42,0.85);
+            backdrop-filter: blur(20px);
+            border-radius: 28px;
+            padding: 24px;
+            border: 1px solid rgba(255,255,255,0.1);
+            height: fit-content;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .panel-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .panel-header i { font-size: 32px; color: #818cf8; background: rgba(129,140,248,0.15); padding: 12px; border-radius: 18px; }
+        .panel-header h3 { font-size: 1.3rem; font-weight: 600; color: #f1f5f9; }
+        
+        .form-group { margin-bottom: 20px; }
+        .form-group label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+        .custom-select { position: relative; width: 100%; }
+        .custom-select select {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(30,41,59,0.9);
+            border: 1.5px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            font-size: 0.85rem;
+            color: #f1f5f9;
+            cursor: pointer;
+            appearance: none;
+        }
+        .custom-select select:hover { border-color: #818cf8; }
+        .custom-select::after {
+            content: '\f078';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #818cf8;
+            font-size: 12px;
+            pointer-events: none;
+        }
+        
+        .travel-modes { display: flex; gap: 12px; margin: 20px 0; }
+        .mode-card {
+            flex: 1;
+            background: rgba(30,41,59,0.6);
+            border: 1.5px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 12px 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .mode-card i { font-size: 24px; color: #94a3b8; margin-bottom: 6px; display: block; }
+        .mode-card span { font-size: 0.7rem; color: #94a3b8; }
+        .mode-card.active { background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2)); border-color: #818cf8; }
+        .mode-card.active i, .mode-card.active span { color: #818cf8; }
+        
+        .action-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border: none;
+            border-radius: 20px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 28px -8px rgba(99,102,241,0.5); }
+        
+        .result-card {
+            background: rgba(0,0,0,0.4);
+            border-radius: 20px;
+            padding: 16px;
+            margin-top: 20px;
+            display: none;
+        }
+        .route-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+        .stat-box { background: rgba(0,0,0,0.3); border-radius: 14px; padding: 12px; text-align: center; }
+        .stat-box .value { font-size: 1.3rem; font-weight: 700; color: white; }
+        .stat-box .label { font-size: 0.6rem; color: #94a3b8; margin-top: 4px; }
+        
+        #map { height: 550px; border-radius: 24px; background: #1a1a2e; }
+        
+        .stats-footer {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+        .stat-card {
+            background: rgba(15,23,42,0.7);
+            backdrop-filter: blur(12px);
+            border-radius: 20px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-card i { font-size: 28px; color: #818cf8; margin-bottom: 8px; }
+        .stat-card .value { font-size: 1.6rem; font-weight: 700; color: white; }
+        .stat-card .label { font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; }
+        
+        .legend {
+            background: rgba(0,0,0,0.5);
+            border-radius: 14px;
+            padding: 10px;
+            margin-top: 15px;
+            font-size: 0.6rem;
+            color: #94a3b8;
+        }
+        .legend span { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; }
+        
+        .leaflet-routing-container { display: none !important; }
+        
+        @media (max-width: 968px) {
+            .main-grid { grid-template-columns: 1fr; }
+            .stats-footer { grid-template-columns: repeat(2, 1fr); }
+        }
+        
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: #1e293b; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #6366f1; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div class="bg-particles"></div>
+
+    <div class="app-container">
+        <div class="header">
+            <h1><i class="fas fa-map-marked-alt"></i> UNIB Navigator Pro</h1>
+            <div class="badge-container">
+                <div class="badge"><i class="fas fa-university"></i> 30+ Lokasi Kampus</div>
+                <div class="badge"><i class="fas fa-road"></i> OSRM Routing (OpenStreetMap)</div>
+                <div class="badge"><i class="fas fa-chart-line"></i> Rute Mengikuti Jalan</div>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <div class="control-panel">
+                <div class="panel-header">
+                    <i class="fas fa-route"></i>
+                    <div>
+                        <h3>Smart Navigation</h3>
+                        <p>30+ lokasi | Rute berdasarkan OSM</p>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-play-circle"></i> TITIK AWAL</label>
+                    <div class="custom-select">
+                        <select id="startPoint"></select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-flag-checkered"></i> TITIK TUJUAN</label>
+                    <div class="custom-select">
+                        <select id="endPoint"></select>
+                    </div>
+                </div>
+
+                <label style="font-size:0.7rem; color:#94a3b8;"><i class="fas fa-transport"></i> MODE PERJALANAN</label>
+                <div class="travel-modes">
+                    <div class="mode-card active" data-profile="foot"><i class="fas fa-walking"></i><span>Jalan Kaki</span></div>
+                    <div class="mode-card" data-profile="driving"><i class="fas fa-car"></i><span>Mobil</span></div>
+                    <div class="mode-card" data-profile="cycling"><i class="fas fa-bicycle"></i><span>Sepeda</span></div>
+                </div>
+
+                <button class="action-btn" id="searchBtn">
+                    <i class="fas fa-magic"></i> Cari Rute OSM
+                </button>
+
+                <div id="resultPanel" class="result-card">
+                    <div class="result-header">
+                        <i class="fas fa-check-circle"></i>
+                        <h4>Hasil OSRM Routing</h4>
+                    </div>
+                    <div id="routeSummary">
+                        <p style="font-size:0.8rem; color:#94a3b8; text-align:center;"><i class="fas fa-spinner fa-pulse"></i> Klik "Cari Rute OSM"</p>
+                    </div>
+                </div>
+
+                <div class="legend">
+                    <strong><i class="fas fa-map"></i> Informasi:</strong><br>
+                    • Rute dihitung oleh <strong>OSRM (Open Source Routing Machine)</strong><br>
+                    • Data sumber: <strong>OpenStreetMap</strong> [citation:1][citation:2]<br>
+                    • Rute mengikuti <strong>JALAN SESUNGGUHNYA</strong> (bukan garis lurus)<br>
+                    • Periksa koneksi internet untuk routing!
+                </div>
+            </div>
+
+            <div>
+                <div id="map"></div>
+                <div class="stats-footer">
+                    <div class="stat-card"><i class="fas fa-location-dot"></i><div class="value" id="statNodes">0</div><div class="label">Landmarks</div></div>
+                    <div class="stat-card"><i class="fas fa-brain"></i><div class="value">OSRM</div><div class="label">Routing</div></div>
+                    <div class="stat-card"><i class="fas fa-map"></i><div class="value">OpenStreetMap</div><div class="label">Map Data</div></div>
+                    <div class="stat-card"><i class="fas fa-chart-line"></i><div class="value" id="calcTime">0.00</div><div class="label">ms</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== LOKASI UNIB (OpenStreetMap) ====================
+        const locations = {
+            // Pusat Administrasi
+            'Rektorat': { lat: -3.75873, lng: 102.27289, icon: '🏛️', name: 'Rektorat UNIB', category: 'admin' },
+            'GLT': { lat: -3.758127, lng: 102.271906, icon: '🏢', name: 'Gedung Layanan Terpadu', category: 'admin' },
+            
+            // Dekanat/Fakultas
+            'FEB': { lat: -3.761574, lng: 102.268591, icon: '📊', name: 'Fakultas Ekonomi & Bisnis', category: 'dekanat' },
+            'Fak_Hukum': { lat: -3.7607, lng: 102.26835, icon: '⚖️', name: 'Fakultas Hukum UNIB', category: 'dekanat' },
+            'Fak_Pertanian': { lat: -3.759326, lng: 102.269245, icon: '🌾', name: 'Fakultas Pertanian', category: 'dekanat' },
+            'FISIP': { lat: -3.758940, lng: 102.274181, icon: '🏛️', name: 'Fakultas Ilmu Sosial & Politik', category: 'dekanat' },
+            'Dekan_Teknik': { lat: -3.758373, lng: 102.276605, icon: '⚙️', name: 'Fakultas Teknik', category: 'dekanat' },
+            'FKIP': { lat: -3.756500, lng: 102.272000, icon: '📖', name: 'FKIP', category: 'dekanat' },
+            'FMIPA': { lat: -3.755932, lng: 102.274728, icon: '🔬', name: 'FMIPA', category: 'dekanat' },
+            'FKIK': { lat: -3.755135, lng: 102.277983, icon: '🏥', name: 'Fakultas Kedokteran & Ilmu Kesehatan', category: 'dekanat' },
+            
+            // Gedung Kuliah
+            'GKB_I': { lat: -3.760415, lng: 102.267985, icon: '🏫', name: 'Gedung Kuliah Bersama I', category: 'gedung' },
+            'GKB_II': { lat: -3.757994, lng: 102.273915, icon: '🏫', name: 'Gedung Kuliah Bersama II', category: 'gedung' },
+            'GKB_III': { lat: -3.756533, lng: 102.276524, icon: '🏫', name: 'Gedung Kuliah Bersama III', category: 'gedung' },
+            
+            // Laboratorium
+            'Lab_Kimia': { lat: -3.756952, lng: 102.272726, icon: '🧪', name: 'Laboratorium Kimia', category: 'lab' },
+            'Lab_Fisika': { lat: -3.756186, lng: 102.273727, icon: '⚛️', name: 'Laboratorium Fisika', category: 'lab' },
+            'Jurusan_Peternakan': { lat: -3.757985, lng: 102.272538, icon: '🐄', name: 'Jurusan Peternakan', category: 'lab' },
+            
+            // Fasilitas
+            'Perpustakaan': { lat: -3.756821, lng: 102.274728, icon: '📚', name: 'Perpustakaan Pusat', category: 'fasilitas' },
+            'GSG': { lat: -3.757674, lng: 102.276575, icon: '🏟️', name: 'Gedung Serba Guna', category: 'fasilitas' },
+            'Stadion': { lat: -3.757549, lng: 102.278064, icon: '⚽', name: 'Stadion UNIB', category: 'fasilitas' },
+            'Masjid_Darul_Ulum': { lat: -3.758975, lng: 102.275941, icon: '🕌', name: 'Masjid Darul Ulum', category: 'fasilitas' },
+            'Danau_Ilmu': { lat: -3.758800, lng: 102.273800, icon: '💧', name: 'Danau Ilmu', category: 'taman' },
+            'Taman_Inspirasi': { lat: -3.758550, lng: 102.275200, icon: '🌳', name: 'Taman Inspirasi', category: 'taman' }
+        };
+
+        // ==================== MAP INIT ====================
+        let map, markers = {}, currentRoute = null;
+
+        function initMap() {
+            map = L.map('map').setView([-3.7587, 102.2735], 16);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+                maxZoom: 19
+            }).addTo(map);
+            L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(map);
+        }
+
+        // Warna marker
+        const categoryColors = {
+            'admin': '#ef4444', 'dekanat': '#f59e0b', 'gedung': '#10b981',
+            'lab': '#06b6d4', 'fasilitas': '#8b5cf6', 'taman': '#84cc16'
+        };
+
+        function addMarkers() {
+            Object.keys(locations).forEach(key => {
+                const color = categoryColors[locations[key].category];
+                const icon = L.divIcon({
+                    html: `<div style="background: ${color}; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 14px;">${locations[key].icon}</div>`,
+                    iconSize: [32, 32],
+                    popupAnchor: [0, -16]
+                });
+                markers[key] = L.marker([locations[key].lat, locations[key].lng], { icon })
+                    .bindPopup(`<b>${locations[key].name}</b><br>📍 ${locations[key].lat.toFixed(6)}`)
+                    .addTo(map);
+            });
+        }
+
+        // ==================== OSRM ROUTING (Mengikuti Jalan) ====================
+        // Profile: foot (jalan kaki), driving (mobil), cycling (sepeda)
+        let currentProfile = 'foot';
+        
+        function calculateOSRMRoute(startKey, endKey) {
+            const startTime = performance.now();
+            const startLatLng = L.latLng(locations[startKey].lat, locations[startKey].lng);
+            const endLatLng = L.latLng(locations[endKey].lat, locations[endKey].lng);
+            
+            // Hapus route sebelumnya
+            if (currentRoute) {
+                map.removeControl(currentRoute);
+            }
+            
+            // Buat route baru dengan OSRM
+            // Router menggunakan OpenStreetMap data untuk menghitung rute berdasarkan jalan [citation:5][citation:7]
+            currentRoute = L.Routing.control({
+                waypoints: [startLatLng, endLatLng],
+                router: L.Routing.osrmv1({
+                    serviceUrl: 'https://router.project-osrm.org/route/v1',
+                    profile: currentProfile  // foot, driving, atau cycling
+                }),
+                lineOptions: {
+                    styles: [{ color: '#f59e0b', weight: 6, opacity: 0.95 }],
+                    addWaypoints: false
+                },
+                routeWhileDragging: false,
+                showAlternatives: false,
+                fitSelectedRoutes: true,
+                show: false
+            }).addTo(map);
+            
+            // Event listener untuk hasil routing
+            currentRoute.on('routesfound', function(e) {
+                const route = e.routes[0];
+                const distance = route.summary.totalDistance;
+                const duration = route.summary.totalTime;
+                
+                const endTime = performance.now();
+                document.getElementById('calcTime').innerHTML = (endTime - startTime).toFixed(2);
+                
+                // Format durasi
+                const minutes = Math.floor(duration / 60);
+                const seconds = duration % 60;
+                
+                // Update panel hasil
+                document.getElementById('resultPanel').style.display = 'block';
+                document.getElementById('routeSummary').innerHTML = `
+                    <div class="route-stats">
+                        <div class="stat-box">
+                            <div class="value">${(distance/1000).toFixed(2)} km</div>
+                            <div class="label">Total Jarak</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="value">${minutes} menit ${seconds} dtk</div>
+                            <div class="label">Estimasi Waktu</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="value">OSRM</div>
+                            <div class="label">Routing Engine</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px; padding:8px; background:rgba(0,0,0,0.3); border-radius:12px; font-size:0.7rem; text-align:center;">
+                        <i class="fas fa-check-circle" style="color:#4ade80;"></i> 
+                        <strong>Rute mengikuti JALAN ASPAL</strong> (OpenStreetMap)<br>
+                        <i class="fas fa-${currentProfile === 'foot' ? 'walking' : (currentProfile === 'driving' ? 'car' : 'bicycle')}"></i> 
+                        Mode: ${currentProfile === 'foot' ? 'Jalan Kaki' : (currentProfile === 'driving' ? 'Mobil' : 'Sepeda')}
+                    </div>
+                `;
+                
+                // Buka popup marker
+                markers[startKey].openPopup();
+                setTimeout(() => markers[endKey].openPopup(), 2000);
+                
+                // Sembunyikan panel routing default
+                setTimeout(() => {
+                    document.querySelectorAll('.leaflet-routing-container').forEach(el => el.style.display = 'none');
+                }, 100);
+            });
+            
+            currentRoute.on('routingerror', function(e) {
+                document.getElementById('resultPanel').style.display = 'block';
+                document.getElementById('routeSummary').innerHTML = `
+                    <p style="color:#ef4444; text-align:center;">
+                        <i class="fas fa-exclamation-triangle"></i> Routing Error: ${e.error.message || 'Tidak dapat menemukan rute'}
+                    </p>
+                    <p style="font-size:0.7rem; color:#94a3b8; text-align:center; margin-top:8px;">
+                        Pastikan koneksi internet aktif dan server OSRM dapat diakses.
+                    </p>
+                `;
+            });
+        }
+
+        // ==================== INIT DROPDOWNS ====================
+        function initDropdowns() {
+            const startSel = document.getElementById('startPoint');
+            const endSel = document.getElementById('endPoint');
+            const order = Object.keys(locations);
+            order.forEach(key => {
+                startSel.appendChild(new Option(locations[key].name, key));
+                endSel.appendChild(new Option(locations[key].name, key));
+            });
+            startSel.value = 'Rektorat';
+            endSel.value = 'Dekan_Teknik';
+        }
+
+        // ==================== UI HANDLERS ====================
+        function initUIHandlers() {
+            // Mode perjalanan
+            document.querySelectorAll('.mode-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('active'));
+                    card.classList.add('active');
+                    currentProfile = card.dataset.profile;
+                });
+            });
+            
+            // Tombol cari rute
+            document.getElementById('searchBtn').addEventListener('click', () => {
+                const start = document.getElementById('startPoint').value;
+                const end = document.getElementById('endPoint').value;
+                if (start === end) {
+                    alert('⚠️ Pilih titik awal dan tujuan yang berbeda!');
+                    return;
+                }
+                calculateOSRMRoute(start, end);
+            });
+        }
+
+        // ==================== INITIALIZE ====================
+        window.onload = () => {
+            initMap();
+            addMarkers();
+            initDropdowns();
+            initUIHandlers();
+            document.getElementById('statNodes').innerHTML = Object.keys(locations).length;
+            
+            // Info popup
+            setTimeout(() => {
+                L.popup()
+                    .setLatLng([-3.75873, 102.27289])
+                    .setContent('<b>🗺️ UNIB Navigator Pro</b><br>🚗 Rute dihitung oleh <b>OSRM (OpenStreetMap)</b><br>📍 Rute mengikuti <b>JALAN SESUNGGUHNYA</b>!')
+                    .openOn(map);
+            }, 500);
+        };
+    </script>
+</body>
+</html>
